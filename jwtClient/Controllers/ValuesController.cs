@@ -77,6 +77,17 @@ namespace jwtClient.Controllers
             Console.ReadKey();
         }
 
+        private static async Task IncluirUsuarioAsync(HttpClient client)
+        {
+            var parameters = new Dictionary<string, string> { { "username", "batman" }, { "password", "batman" }, { "role", "manager" } };
+            var encodedContent = new FormUrlEncodedContent(parameters);
+
+            var response = await client.PostAsync(_urlBase + "usuario", encodedContent).ConfigureAwait (false);
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                // Se quiser tomar alguma ação é aqui
+            }
+        }
         // GET api/values
         [HttpGet]
         public ActionResult<IEnumerable<string>> Get()
@@ -140,6 +151,51 @@ namespace jwtClient.Controllers
         [HttpPost]
         public void Post([FromBody] string value)
         {
+            var builder = new ConfigurationBuilder()
+                 .SetBasePath(Directory.GetCurrentDirectory())
+                 .AddJsonFile($"appsettings.json");
+            var config = builder.Build();
+
+            _urlBase = config.GetSection("API_Access:UrlBase").Value;
+
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(
+                    new MediaTypeWithQualityHeaderValue("application/json"));
+
+                HttpResponseMessage respToken = client.PostAsync(
+                    _urlBase + "login", new StringContent(
+                        JsonConvert.SerializeObject(new
+                        {
+                            Username = config.GetSection("API_Access:UserID").Value,
+                            Password = config.GetSection("API_Access:AccessKey").Value
+                        }), Encoding.UTF8, "application/json")).Result;
+
+                string conteudo =
+                    respToken.Content.ReadAsStringAsync().Result;
+                Console.WriteLine(conteudo);
+
+                if (respToken.StatusCode == HttpStatusCode.OK)
+                {
+                    Token token = JsonConvert.DeserializeObject<Token>(conteudo);
+                    if (token.Authenticated)
+                    {
+                        client.DefaultRequestHeaders.Authorization =
+                            new AuthenticationHeaderValue("Bearer", token.AccessToken);
+
+                        IncluirUsuarioAsync(client);
+
+                    }
+                }
+                else if (respToken.StatusCode == HttpStatusCode.NotFound)
+                {
+                    Console.WriteLine("Usuario ou senha incorretos");
+                }
+            }
+
+            Console.WriteLine("\nFinalizado!");
+            Console.ReadKey();
         }
 
         // PUT api/values/5
